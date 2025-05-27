@@ -1,0 +1,9 @@
+{
+  "base_url": "https://www.bitstamp.net/api/",
+  "api_version": "v2",
+  "rate_limit_sec": 400,
+  "rate_limit_min": 1000,
+  "timeout_ms": 1000,
+  "client_id": "client_id",
+  "client_secret": "client_secret"
+}
