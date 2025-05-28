@@ -1,9 +1,23 @@
-use crate::config;
-use std::error::Error;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+use url::Url;
+
+const DEFAULT_API_VERSION: &str = "v2";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiConfig {
+    pub base_url: Url,
+    #[serde(rename = "api_version", default = "default_api_version")]
+    pub version: String,
+    pub rate_limit_sec: u16,
+    pub rate_limit_min: u16,
+    pub timeout_ms: u16,
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+}
 
 pub struct Client {
-    config: config::ApiConfig,
+    config: ApiConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,37 +79,52 @@ pub struct Market {
     pub market_type: String,
 }
 
+impl ApiConfig {
+    pub fn from_json(path_to_config_file: &str) -> Self {
+        let config = std::fs::read_to_string(path_to_config_file).unwrap();
+        serde_json::from_str(&config).unwrap()
+    }
+}
+
 impl Client {
-    pub fn new(config: &config::ApiConfig) -> Self {
-       Client {
+    pub fn new(config: &ApiConfig) -> Self {
+        Client {
             config: config.clone()
         }
     }
 
-    pub fn get_ticker(&self, market_symbol: String) -> Result<Ticker, Box<dyn Error>> {
-        let url = format!("{}{}/ticker/{}", self.config.base_url, self.config.version, market_symbol);
+    pub fn get_ticker(&self, market_symbol: &str) -> Result<Ticker, Box<dyn Error>> {
+        let url = self.build_url(format!("ticker/{}", market_symbol).as_str());
         let body = self.get(url.as_str())?;
         Ok(serde_json::from_str(&body)?)
     }
 
     pub fn get_currencies(&self) -> Result<Vec<Currency>, Box<dyn Error>> {
-        let url = format!("{}{}/currencies", self.config.base_url, self.config.version);
+        let url = self.build_url("currencies");
         let body = self.get(url.as_str())?;
         Ok(serde_json::from_str(&body)?)
     }
 
     pub fn get_markets(&self) -> Result<Vec<Market>, Box<dyn Error>> {
-        let url = format!("{}{}/markets", self.config.base_url, self.config.version);
+        let url = self.build_url("markets");
         let body = self.get(url.as_str())?;
         Ok(serde_json::from_str(&body)?)
     }
 
     fn get(&self, url: &str) -> Result<String, ureq::Error> {
-        let body= ureq::get(url)
-            .call()?
-            .body_mut()
-            .read_to_string()?;
-
+        let body = ureq::get(url).call()?.body_mut().read_to_string()?;
         Ok(body)
     }
+
+    fn build_url(&self, service: &str) -> String {
+        format!(
+            "{}/{}/{}",
+            self.config.base_url, self.config.version, service
+        )
+    }
 }
+
+fn default_api_version() -> String {
+    String::from(DEFAULT_API_VERSION)
+}
+
