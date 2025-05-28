@@ -1,8 +1,55 @@
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::fmt;
 use url::Url;
 
 const DEFAULT_API_VERSION: &str = "v2";
+
+/// 404.001	Unknown not found error.
+/// 404.002	Order not found for corresponding request.
+/// 404.003	Currency pair not found for corresponding request.
+/// 404.004	Trade account not found for provided API key.
+/// 404.005	Order book not found.
+/// 404.006	Currency not found for corresponding request.
+/// 404.007	Market not found for corresponding request.
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum BitstampError {
+    UnknownNotFound,
+    OrderNotFound,
+    CurrencyPairNotFound,
+    TradeAccountNotFound,
+    OrderBookNotFound,
+    CurrencyNotFound,
+    MarketNotFound,
+}
+
+impl fmt::Display for BitstampError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BitstampError::UnknownNotFound => write!(f, "Unknown not found error (404.001)"),
+            BitstampError::OrderNotFound => {
+                write!(f, "Order not found for corresponding request (404.002)")
+            }
+            BitstampError::CurrencyPairNotFound => write!(
+                f,
+                "Currency pair not found for corresponding request (404.003)"
+            ),
+            BitstampError::TradeAccountNotFound => {
+                write!(f, "Trade account not found for provided API key (404.004)")
+            }
+            BitstampError::OrderBookNotFound => write!(f, "Order book not found (404.005)"),
+            BitstampError::CurrencyNotFound => {
+                write!(f, "Currency not found for corresponding request (404.006)")
+            }
+            BitstampError::MarketNotFound => {
+                write!(f, "Market not found for corresponding request (404.007)")
+            }
+        }
+    }
+}
+
+impl Error for BitstampError {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
@@ -33,7 +80,10 @@ pub struct Ticker {
     ask: String,
     side: String,
     open_24: String,
-    percent_change_24: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    percent_change_24: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pair: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +129,20 @@ pub struct Market {
     pub market_type: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrderBook {
+    pub timestamp: String,
+    pub microtimestamp: String,
+    pub bids: Vec<Order>,
+    pub asks: Vec<Order>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Order {
+    pub price: String,
+    pub amount: String,
+}
+
 impl ApiConfig {
     pub fn from_json(path_to_config_file: &str) -> Self {
         let config = std::fs::read_to_string(path_to_config_file).unwrap();
@@ -89,13 +153,24 @@ impl ApiConfig {
 impl Client {
     pub fn new(config: &ApiConfig) -> Self {
         Client {
-            config: config.clone()
+            config: config.clone(),
         }
     }
 
     pub fn get_ticker(&self, market_symbol: &str) -> Result<Ticker, Box<dyn Error>> {
         let url = self.build_url(format!("ticker/{}", market_symbol).as_str());
         let body = self.get(url.as_str())?;
+
+        // Try to parse as array first
+        if let Ok(tickers) = serde_json::from_str::<Vec<Ticker>>(&body) {
+            if let Some(ticker) = tickers.first() {
+                return Ok(ticker.clone());
+            }
+        } else if let Err(error) = serde_json::from_str::<Vec<Ticker>>(&body) {
+            println!("Error: {}", error);
+        }
+
+        // If not an array, try to parse as single ticker
         Ok(serde_json::from_str(&body)?)
     }
 
@@ -111,8 +186,15 @@ impl Client {
         Ok(serde_json::from_str(&body)?)
     }
 
-    fn get(&self, url: &str) -> Result<String, ureq::Error> {
-        let body = ureq::get(url).call()?.body_mut().read_to_string()?;
+    pub fn get_order_book(&self, market_symbol: &str) -> Result<OrderBook, Box<dyn Error>> {
+        let url = self.build_url(format!("order_book/{}", market_symbol).as_str());
+        let body = self.get(url.as_str())?;
+        Ok(serde_json::from_str(&body)?)
+    }
+
+    fn get(&self, url: &str) -> Result<String, Box<dyn Error>> {
+        let mut res = ureq::get(url).call()?;
+        let body = res.body_mut().read_to_string()?;
         Ok(body)
     }
 
@@ -127,4 +209,3 @@ impl Client {
 fn default_api_version() -> String {
     String::from(DEFAULT_API_VERSION)
 }
-

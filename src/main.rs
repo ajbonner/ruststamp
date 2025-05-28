@@ -1,6 +1,6 @@
+use crate::client::ApiConfig;
 use clap::{Parser, Subcommand};
 use log::{LevelFilter, info};
-use crate::client::ApiConfig;
 
 mod client;
 
@@ -30,6 +30,11 @@ enum Commands {
     Markets {
         #[arg(short = 'b', long = "brief", help = "Show only market symbols")]
         brief: bool,
+    },
+    /// Get order book for a market symbol
+    OrderBook {
+        /// Market symbol (e.g., btcusd, xrpgbb). Use `markets` command to list all available markets
+        market_symbol: String,
     },
 }
 
@@ -66,6 +71,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 info!("{:#?}", markets);
             }
+        }
+        Commands::OrderBook { market_symbol } => {
+            let order_book = bitstamp.get_order_book(market_symbol.as_str())?;
+            info!("{:#?}", order_book);
         }
     }
 
