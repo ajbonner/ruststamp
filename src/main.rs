@@ -32,6 +32,7 @@ enum Commands {
         brief: bool,
     },
 }
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::formatted_builder()
         .filter_level(LevelFilter::Info) // Default to Info level
