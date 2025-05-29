@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
+use std::time::Duration;
+use ureq::Agent;
+use ureq::http::StatusCode;
 use url::Url;
 
 const DEFAULT_API_VERSION: &str = "v2";
@@ -193,9 +196,32 @@ impl Client {
     }
 
     fn get(&self, url: &str) -> Result<String, Box<dyn Error>> {
-        let mut res = ureq::get(url).call()?;
-        let body = res.body_mut().read_to_string()?;
-        Ok(body)
+        let agent = self.ureq_agent_with_response_for_status_error();
+        let res= agent.get(url).call();
+
+        match res {
+            Ok(mut res) => {
+                let status_code = res.status();
+                match status_code {
+                    StatusCode::OK => {
+                        let body = res.body_mut().read_to_string()?;
+                        Ok(body)
+                    },
+                    StatusCode::NOT_FOUND => {
+                        // let body = res.body_mut().read_to_string()?;
+                        Err("404 Not Found".into())
+                    },
+                    _ => {
+                        // let body = res.body_mut().read_to_string()?;
+                        Err(status_code.to_string().into())
+                    }
+                }
+            },
+            Err(e) => {
+                // Handle everything else transport errors (connection failed, timeout, etc.)
+                Err(e.into())
+            }
+        }
     }
 
     fn build_url(&self, service: &str) -> String {
@@ -203,6 +229,15 @@ impl Client {
             "{}/{}/{}",
             self.config.base_url, self.config.version, service
         )
+    }
+
+    fn ureq_agent_with_response_for_status_error(&self) -> ureq::Agent {
+        let config = Agent::config_builder()
+            .timeout_global(Option::from(Duration::from_secs(5)))
+            .http_status_as_error(false)
+            .build();
+
+        Agent::new_with_config(config)
     }
 }
 
