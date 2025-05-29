@@ -1,14 +1,24 @@
 use crate::client::ApiConfig;
 use clap::{Parser, Subcommand};
+use clap::builder::styling;
 use log::{LevelFilter, info};
 
 mod client;
+mod error;
+
+const CLI_STYLE: styling::Styles = styling::Styles::styled()
+    .header(styling::AnsiColor::Green.on_default().bold())
+    .usage(styling::AnsiColor::Green.on_default().bold())
+    .literal(styling::AnsiColor::Blue.on_default().bold())
+    .placeholder(styling::AnsiColor::Cyan.on_default());
+
 
 #[derive(Parser)]
-#[command(name = "bitstamp")]
-#[command(about = "A console Bitstamp API client")]
+#[command(name = "ruststamp")]
+#[command(about = "A console Bitstamp API client written in Rust")]
 #[command(version)]
 #[command(color = clap::ColorChoice::Auto)]
+#[command(styles = CLI_STYLE)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -45,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
     let config = ApiConfig::from_json("config.json");
-    let bitstamp = client::Client::new(&config);
+    let bitstamp = client::RestClient::new(&config);
 
     match cli.command {
         Commands::Ticker { market_symbol } => {
